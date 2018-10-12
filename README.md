@@ -3,6 +3,7 @@
 This is a program that can use the touchpad to switch workspaces, base on libinput.
 
 The test environment below is Linux Mint 18.1 Cinnamon 64-bit, on my Lenovo Y510p laptop.
+Now it can be used on Ubuntu 16.04!
 
 ![](http://7tebhf.com1.z0.glb.clouddn.com/output1.gif)
 
