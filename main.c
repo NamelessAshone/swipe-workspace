@@ -11,8 +11,69 @@
 
 #define INTERVAL 100 // in ms
 #define THRESHOLD 10 
-#define LEFT_SWIPE "xdotool key alt+ctrl+Right"
-#define RIGHT_SWIPE "xdotool key alt+ctrl+Left"
+#define LEFT_SWIPE		"xdotool key ctrl+alt+Left"
+#define RIGHT_SWIPE		"xdotool key ctrl+alt+Right"
+#define UP_SWIPE		"xdotool key ctrl+alt+Up"
+#define DOWN_SWIPE		"xdotool key ctrl+alt+Down"
+
+int step = 1; 
+
+int find (char *src, char *tgt);
+int scan_device (int ev);
+int dispatch (struct libinput *li);
+unsigned long timestamp ();
+int open_restricted (const char *path, int flags, void *user_data);
+int close_restricted (int fd, void *user_data);
+void do_forward();
+void do_backward();
+void do_left();
+void do_right();
+void do_up();
+void do_down();
+void clean_old_events (struct libinput *li, int direction);
+inline void handle_pointer_motion (struct libinput_event *);
+
+int main () {
+	int dev = scan_device(0x0b);
+	if (dev == -1) {
+		exit(-1);
+	}
+	char dev_str[50];
+	sprintf(dev_str, "/dev/input/event%d", dev);
+
+	struct libinput_interface interface = {
+		open_restricted,
+		close_restricted
+	};
+
+	struct libinput *li = libinput_path_create_context(&interface, NULL);
+	struct libinput_device *device = libinput_path_add_device(li, dev_str);
+	if (device == NULL) {
+		printf("get device failed, please check your permissions\n");
+		return -1;
+	} 
+	struct libinput_event *ev;
+	unsigned long last_left = 0, last_right = 0, t = 0;
+
+	libinput_device_ref(device);
+	libinput_ref(li);
+
+	dispatch(li);
+	while (1) {
+		ev = libinput_get_event(li);
+		if (ev == NULL) {
+			libinput_event_destroy(ev);
+			dispatch(li);
+			continue;
+		}
+		switch (libinput_event_get_type(ev)) {
+			case LIBINPUT_EVENT_POINTER_AXIS:
+				handle_pointer_motion(ev);
+				break;
+		}
+		dispatch(li);
+	}
+}
 
 int find (char *src, char *tgt) {
 	int pos = 0;
@@ -76,12 +137,50 @@ int close_restricted (int fd, void *user_data) {
 	close(fd);
 }
 
+void do_forward() {
+	if (step == 2) {
+		do_down();
+		do_left();
+		step = 3;
+	} else if (step == 4) {
+		do_up();
+		do_left();
+		step = 1;
+	} else {
+		do_right();
+		step++;
+	}
+}
+
+void do_backward() {
+	if (step == 1) {
+		do_down();
+		do_right();
+		step = 4;
+	} else if (step == 3) {
+		do_up();
+		do_right();
+		step = 2;
+	} else {
+		do_left();
+		step--;
+	}
+}
+
 void do_left() {
 	system(LEFT_SWIPE);
 }
 
 void do_right() {
 	system(RIGHT_SWIPE);
+}
+
+void do_up() {
+	system(UP_SWIPE);
+}
+
+void do_down() {
+	system(DOWN_SWIPE);
 }
 
 void clean_old_events (struct libinput *li, int direction) {
@@ -98,8 +197,6 @@ void clean_old_events (struct libinput *li, int direction) {
 	}
 }
 
-inline void handle_pointer_motion (struct libinput_event *);
-
 void handle_pointer_motion (struct libinput_event *ev) {
 	enum libinput_pointer_axis_source src = libinput_event_pointer_get_axis_source(ev);
 	double axis_value = libinput_event_pointer_get_axis_value(ev, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL);
@@ -107,58 +204,18 @@ void handle_pointer_motion (struct libinput_event *ev) {
 	t = timestamp();
 	if (axis_value > THRESHOLD) {
 		if (t > last_time+INTERVAL) {
-			do_right();
+			// do_right();
+			do_forward();
 			last_time = timestamp();
 			clean_old_events(libinput_event_get_context(ev), 1);
 		}
 	} else if (axis_value < -THRESHOLD) {
 		if (t > last_time+INTERVAL) {
-			do_left();
+			// do_left();
+			do_backward();
 			last_time = timestamp();
 			clean_old_events(libinput_event_get_context(ev), -1);
 		}
 	}
 	libinput_event_destroy(ev);
-}
-
-int main () {
-	int dev = scan_device(0x0b);
-	if (dev == -1) {
-		exit(-1);
-	}
-	char dev_str[50];
-	sprintf(dev_str, "/dev/input/event%d", dev);
-
-	struct libinput_interface interface = {
-		open_restricted,
-		close_restricted
-	};
-
-	struct libinput *li = libinput_path_create_context(&interface, NULL);
-	struct libinput_device *device = libinput_path_add_device(li, dev_str);
-	if (device == NULL) {
-		printf("get device failed, please check your permissions\n");
-		return -1;
-	} 
-	struct libinput_event *ev;
-	unsigned long last_left = 0, last_right = 0, t = 0;
-
-	libinput_device_ref(device);
-	libinput_ref(li);
-
-	dispatch(li);
-	while (1) {
-		ev = libinput_get_event(li);
-		if (ev == NULL) {
-			libinput_event_destroy(ev);
-			dispatch(li);
-			continue;
-		}
-		switch (libinput_event_get_type(ev)) {
-			case LIBINPUT_EVENT_POINTER_AXIS:
-				handle_pointer_motion(ev);
-				break;
-		}
-		dispatch(li);
-	}
 }
